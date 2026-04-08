@@ -1,56 +1,42 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-import joblib
+from pydantic import BaseModel, Field
 import pandas as pd
+import numpy as np
 import os
-import math
+import dagshub
+import mlflow
 
-app = FastAPI(title="SonicForecast API")
+# 1. Initialize DagsHub & MLflow (Cloud Tracking)
+# This allows the API to pull the model artifact directly from the cloud
+dagshub.init(repo_owner='AryanBaibaswata', repo_name='SonicForecast', mlflow=True)
+mlflow.set_tracking_uri("https://dagshub.com/AryanBaibaswata/SonicForecast.mlflow")
 
-# Setup CORS to allow frontend communication
+app = FastAPI(title="SonicForecast API - Cloud Powered")
+
+# 2. Setup CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins (can be restricted to localhost:5173 later)
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load the trained model pipeline
-current_dir = os.path.dirname(os.path.abspath(__file__))
-model_path = os.path.join(current_dir, 'model.pkl')
+# 3. Dynamic Model Loading
+# REPLACE THIS RUN ID with the one from your DagsHub Experiment page
+# RUN_ID = "675dcdf4f2c04273a252fc5fbc807752" 
+LOGGED_MODEL = f'models:/v1/1'
+
 try:
-    model_pipeline = joblib.load(model_path)
-    print(f"Model loaded successfully from {model_path}")
+    print(f"Fetching model from DagsHub: {LOGGED_MODEL}...")
+    model_pipeline = mlflow.pyfunc.load_model(LOGGED_MODEL)
+    print("Cloud model loaded successfully!")
 except Exception as e:
-    print(f"Error loading model: {e}. Make sure to run export_model.py first.")
+    print(f"Error loading model from DagsHub: {e}")
     model_pipeline = None
 
-# Input Data Schema
-class TrackFeatures(BaseModel):
-    bpm: float
-    danceability__: float
-    valence__: float
-    energy__: float
-    acousticness__: float
-    instrumentalness__: float
-    liveness__: float
-    speechiness__: float
-    artist_count: int
-    released_month: int
-
-    class Config:
-        # Pydantic alias generator to handle properties with `%` sign
-        # Frontend might send properties mapped differently, so let's allow flexibility.
-        # However, the frontend sends danceability_% or danceability__? Let's alias it carefully.
-        pass
-
-# The frontend actually sends the data like: {'bpm': 120, 'danceability_%': 80, ...}
-# Since python variables can't have '%', we will just accept a generic dict
-# or strongly type it with schema mapping
-from pydantic import Field
-
+# 4. Input Data Schema (Using Aliases to match Frontend % signs)
 class PydanticTrackFeatures(BaseModel):
     bpm: float = Field(..., alias="bpm")
     danceability_pct: float = Field(..., alias="danceability_%")
@@ -63,42 +49,55 @@ class PydanticTrackFeatures(BaseModel):
     artist_count: int = Field(..., alias="artist_count")
     released_month: int = Field(..., alias="released_month")
 
+    class Config:
+        populate_by_name = True
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "model_loaded": model_pipeline is not None}
+    return {
+        "status": "ok", 
+        "model_source": "DagsHub/MLflow",
+        "model_loaded": model_pipeline is not None
+    }
 
 @app.post("/predict")
 def predict_hit(features: PydanticTrackFeatures):
     if not model_pipeline:
-        return {"error": "Model not loaded on the backend."}
+        raise HTTPException(status_code=503, detail="Model not loaded on the backend.")
     
-    # Convert incoming dict into the format pandas expects
-    # The aliases perfectly map back to what the scikit pipeline expects
-    input_data = {
-        'bpm': [features.bpm],
-        'danceability_%': [features.danceability_pct],
-        'valence_%': [features.valence_pct],
-        'energy_%': [features.energy_pct],
-        'acousticness_%': [features.acousticness_pct],
-        'instrumentalness_%': [features.instrumentalness_pct],
-        'liveness_%': [features.liveness_pct],
-        'speechiness_%': [features.speechiness_pct],
-        'artist_count': [features.artist_count],
-        'released_month': [features.released_month]
-    }
+    # Format data for the scikit-learn pipeline
+    # The keys here must match exactly the column names used during training
+    input_data = pd.DataFrame([{
+        'bpm': features.bpm,
+        'danceability_%': features.danceability_pct,
+        'valence_%': features.valence_pct,
+        'energy_%': features.energy_pct,
+        'acousticness_%': features.acousticness_pct,
+        'instrumentalness_%': features.instrumentalness_pct,
+        'liveness_%': features.liveness_pct,
+        'speechiness_%': features.speechiness_pct,
+        'artist_count': features.artist_count,
+        'released_month': features.released_month
+    }])
     
-    df = pd.DataFrame(input_data)
+    # 1. Predict the log of streams
+    log_prediction = model_pipeline.predict(input_data)[0]
     
-    # Predict the log of streams
-    log_streams = model_pipeline.predict(df)[0]
+    # 2. Convert back to actual stream count (Inverse of log1p is expm1)
+    actual_streams = np.expm1(log_prediction)
     
-    # Normalizing the score
-    # log_streams usually caps around 22.5 max for ~3B streams
-    # So we'll map that linearly or semi-linearly to 0-100
+    # 3. Calculate a 0-100 "Hit Score" for the frontend
+    # Based on the dataset, ~3B streams is roughly 22 on the log scale
     max_expected_log = 22.5
-    raw_score = (log_streams / max_expected_log) * 100
+    raw_score = (log_prediction / max_expected_log) * 100
+    clamped_score = max(0, min(100, raw_score))
     
-    # Clamp score to 0 - 100
-    score = max(0, min(100, raw_score))
-    
-    return {"prediction": float(score), "log_streams_raw": float(log_streams)}
+    return {
+        "prediction_score": round(float(clamped_score), 2),
+        "estimated_streams": round(float(actual_streams), 0),
+        "log_raw": float(log_prediction)
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
