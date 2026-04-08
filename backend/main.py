@@ -13,8 +13,9 @@ import mlflow
 token = os.getenv("DAGSHUB_TOKEN", "").strip()
 if token:
     os.environ["DAGSHUB_TOKEN"] = token
+    os.environ["MLFLOW_TRACKING_USERNAME"] = "AryanBaibaswata"
+    os.environ["MLFLOW_TRACKING_PASSWORD"] = token
 
-    
 dagshub.init(repo_owner='AryanBaibaswata', repo_name='SonicForecast', mlflow=True)
 mlflow.set_tracking_uri("https://dagshub.com/AryanBaibaswata/SonicForecast.mlflow")
 
