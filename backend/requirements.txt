@@ -3,5 +3,6 @@ uvicorn
 pydantic
 scikit-learn
 pandas
-numpy
+numpy=2.4.3
 joblib
+psutil=6.1.1
