@@ -60,7 +60,7 @@ class PydanticTrackFeatures(BaseModel):
         populate_by_name = True
 
 @app.get("/health")
-def health_check():
+async def health_check():  # <-- Add 'async' here
     return {
         "status": "ok", 
         "model_source": "DagsHub/MLflow",
