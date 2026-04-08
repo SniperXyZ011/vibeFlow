@@ -38,14 +38,14 @@ except Exception as e:
 
 # 4. Input Data Schema (Using Aliases to match Frontend % signs)
 class PydanticTrackFeatures(BaseModel):
-    bpm: float = Field(..., alias="bpm")
-    danceability_pct: float = Field(..., alias="danceability_%")
-    valence_pct: float = Field(..., alias="valence_%")
-    energy_pct: float = Field(..., alias="energy_%")
-    acousticness_pct: float = Field(..., alias="acousticness_%")
-    instrumentalness_pct: float = Field(..., alias="instrumentalness_%")
-    liveness_pct: float = Field(..., alias="liveness_%")
-    speechiness_pct: float = Field(..., alias="speechiness_%")
+    bpm: int = Field(..., alias="bpm")
+    danceability_pct: int = Field(..., alias="danceability_%")
+    valence_pct: int = Field(..., alias="valence_%")
+    energy_pct: int = Field(..., alias="energy_%")
+    acousticness_pct: int = Field(..., alias="acousticness_%")
+    instrumentalness_pct: int = Field(..., alias="instrumentalness_%")
+    liveness_pct: int = Field(..., alias="liveness_%")
+    speechiness_pct: int = Field(..., alias="speechiness_%")
     artist_count: int = Field(..., alias="artist_count")
     released_month: int = Field(..., alias="released_month")
 
