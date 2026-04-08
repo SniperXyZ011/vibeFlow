@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'vibeflow-backend-production.up.railway.app:8080',
+  baseURL: import.meta.env.VITE_API_URL || 'https://vibeflow-backend-production.up.railway.app/',
   headers: {
     'Content-Type': 'application/json',
   },
