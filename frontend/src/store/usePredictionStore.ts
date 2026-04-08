@@ -25,8 +25,7 @@ export const usePredictionStore = create<PredictionState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await getPrediction(get().features);
-      // Assuming backend returns { prediction: <number> }
-      const predValue = response.prediction !== undefined ? response.prediction : response;
+      const predValue = response.prediction_score;
       set({ prediction: Number(predValue), isLoading: false });
     } catch (error: any) {
       set({ error: error.message, isLoading: false });

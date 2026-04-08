@@ -38,7 +38,7 @@ export const PredictionForm = () => {
                     {limit.label}
                   </label>
                   <span className="text-xs font-mono bg-surfaceHighlight px-2 py-1 rounded text-primary border border-primary/20 shadow-[0_0_10px_rgba(29,185,84,0.1)]">
-                    {value.toFixed(key === 'tempo' ? 0 : 2)}
+                    {Math.round(value)}
                   </span>
                 </div>
                 
